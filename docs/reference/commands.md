@@ -34,7 +34,7 @@ Help exits successfully with code `0`.
 stellarforge --version
 ```
 
-The version comes from installed package metadata. No registry request or subprocess is used.
+The version comes from the installed package's `package.json`. The root command name (from the single `bin` entry) and description match the same file; no registry request or subprocess is used, and no duplicate CLI-side constant is kept.
 
 ### Local debug summary
 
@@ -143,6 +143,8 @@ The command requires a valid project `package.json` with a `scripts` object. Scr
 
 A candidate counts as present only when it is a string with a non-blank value; blank or whitespace-only entries are ignored in favour of the next candidate. If every supported candidate is blank or absent, the command fails with actionable guidance before any subprocess is spawned.
 
+The supported invocation location is the generated project root or any nested directory inside it. Root discovery walks at most eight parent directories and stops at the filesystem root, a repository boundary (`.git`), or the generated `.stellarforge.json` marker. Exactly one project root must be discovered; nested workspaces and multiple project roots are rejected with actionable guidance before any subprocess is spawned.
+
 StellarForge invokes npm as an executable with an argument array; it does not execute the package script text through a constructed shell command.
 
 Child stdout/stderr are streamed with process labels.
@@ -177,9 +179,11 @@ Supported project forms are:
 
 A string-valued but empty or whitespace-only `scripts.test` is rejected with exit `2` before any subprocess is spawned, because npm treats an empty test script as a successful no-op and would report success without running any tests.
 
+The supported invocation location is the generated project root or any nested directory inside it. Root discovery uses the same bounded policy as `stellarforge dev`: at most eight parent directories, stopping at the filesystem root, a `.git` boundary, or the generated `.stellarforge.json` marker. Multiple discovered roots are rejected instead of guessed.
+
 When both are present, the Node.js project test workflow is selected first.
 
-StellarForge does not execute package script text directly. It delegates through npm or Cargo and preserves external-process failures.
+StellarForge does not execute package script text directly. It delegates through npm or Cargo and preserves external-process failures. If npm or its supported launcher cannot be started, the failure is reported as a missing/permission-denied runtime prerequisite with the supported versions (`Node.js >=22.13.0 <25`, `npm >=10.9.0`) instead of being reported as a test-script failure. StellarForge never falls back to another package manager or installs tools automatically, and the message does not echo environment values.
 
 ### Exit behavior
 
@@ -227,8 +231,11 @@ stellarforge deploy --source release-deployer
 | --------------------- | ---------------------------------------------------------------------------- |
 | `--network <network>` | Explicit deployment network. CLI value overrides project configuration.      |
 | `--source <identity>` | Named Stellar CLI identity alias. CLI value overrides project configuration. |
+| `--preflight`         | Validate inputs and project requirements without starting the Stellar CLI.   |
 
 The effective network and identity must both be present after configuration resolution.
+
+`--preflight` runs the same local validation as a deployment and exits with code `0` when every check passes. It never starts a subprocess, submits a transaction, or contacts a network.
 
 The MVP deployment command accepts only the exact network value `testnet`. A project config value of `mainnet` or `futurenet` is valid schema data for future command use, but it is rejected by the deploy command.
 
@@ -237,10 +244,12 @@ The source must be a named Stellar CLI identity. Raw secret keys, seed phrases, 
 The invoked external command is equivalent to:
 
 ```text
-stellar contract deploy --source-account deployer --network testnet
+stellar contract deploy --wasm target/wasm32v1-none/release/stellarforge-starter-contract.wasm --source-account deployer --network testnet
 ```
 
 No shell interpolation is used. Signing material remains under Stellar CLI identity management.
+
+The generated Wasm artifact (`target/wasm32v1-none/release/stellarforge-starter-contract.wasm`) must be a regular, non-empty WebAssembly v1 binary (`\0asm` magic header and version 1) located within the canonical project workspace. It must not exceed the documented Soroban contract size limit of 128 KiB (131,072 bytes). Directory paths, symlinks, symlinks escaping the workspace, empty files, oversized files, and unexpected binary or text formats fail locally with exit code `2` before any subprocess is started.
 
 Deployment output is validated against the official Stellar contract identifier format (`C...`, 56 characters Base32). Malformed, truncated, missing, or multiple conflicting contract IDs cannot be mistaken for deployment success.
 
@@ -248,7 +257,7 @@ The local Stellar CLI process has a 10-minute timeout. On timeout, StellarForge 
 
 ### Exit behavior
 
-- `0` — deployment subprocess completes successfully;
+- `0` — deployment subprocess completes successfully, or `--preflight` passes without starting one;
 - `2` — configuration, project layout, network, or identity input is invalid;
 - `3` — Stellar CLI fails to start or returns a failure.
 - `3` — the local deployment process times out; the remote submission outcome may be uncertain.
@@ -272,15 +281,15 @@ The command reports one finding per check, each with a stable id, category, labe
 
 Findings:
 
-| Id | Category | Required | Meaning |
-| --- | --- | --- | --- |
-| `project.manifest-present` | `project` | yes | at least one of `package.json` or `Cargo.toml` exists |
-| `project.package-json.parseable` | `package-manifest` | yes | an existing `package.json` is valid JSON object declaring a `scripts` object |
-| `project.package-json.scripts-test` | `package-manifest` | no | `package.json` declares a non-empty `scripts.test` command (warning only) |
-| `project.cargo-toml.parseable` | `cargo-manifest` | yes | an existing `Cargo.toml` is valid UTF-8 declaring `[package]` or `[workspace]` |
-| `project.configuration.well-formed` | `configuration` | yes | an existing `stellarforge.config.json` passes validation (see [Configuration](configuration.md)) |
+| Id                                  | Category           | Required | Meaning                                                                                          |
+| ----------------------------------- | ------------------ | -------- | ------------------------------------------------------------------------------------------------ |
+| `project.manifest-present`          | `project`          | yes      | at least one of `package.json` or `Cargo.toml` exists                                            |
+| `project.package-json.parseable`    | `package-manifest` | yes      | an existing `package.json` is valid JSON object declaring a `scripts` object                     |
+| `project.package-json.scripts-test` | `package-manifest` | no       | `package.json` declares a non-empty `scripts.test` command (warning only)                        |
+| `project.cargo-toml.parseable`      | `cargo-manifest`   | yes      | an existing `Cargo.toml` is valid UTF-8 declaring `[package]` or `[workspace]`                   |
+| `project.configuration.well-formed` | `configuration`    | yes      | an existing `stellarforge.config.json` passes validation (see [Configuration](configuration.md)) |
 
-Only *required*-check failures set the exit code `5` (diagnostic failure); a `0` exit means the documented required requirements are met. The `scripts.test` finding is informational and never changes the exit code by itself.
+Only _required_-check failures set the exit code `5` (diagnostic failure); a `0` exit means the documented required requirements are met. The `scripts.test` finding is informational and never changes the exit code by itself.
 
 ### Exit behavior
 
@@ -306,3 +315,24 @@ The following are not part of the implemented MVP command surface:
 - arbitrary custom deployment commands.
 
 Do not rely on roadmap items as available behavior until their implementation is merged and documented.
+
+### Preflight
+
+Before the Stellar CLI deployment subprocess starts, `stellarforge deploy` runs a local preflight that lists each required prerequisite with its pass/fail state. Typical checks include:
+
+- the project contains a supported Cargo smart-contract layout;
+- the effective network is exactly `testnet`;
+- the effective source is a valid named Stellar CLI identity alias;
+- the generated Wasm artifact exists, is a valid non-empty WebAssembly v1 binary, does not exceed the 128 KiB (131,072 bytes) Soroban contract size limit, is readable, and is not stale;
+- the configuration file, if present, is well formed.
+
+Preflight is validation and reporting only. It does not invoke a deployment transaction, does not spawn subprocesses, and does not contact any network endpoint.
+
+Preflight output never prints private keys, seed phrases, tokens, account StrKeys, identity alias values, or other sensitive configuration values. Failed checks include remediation steps, for example:
+
+- `network`: set `--network testnet` or add `"network": "testnet"` to `stellarforge.config.json`;
+- `identity`: pass `--source <alias>` with a named Stellar CLI identity, not a raw secret or public key;
+- `project-layout`: run the command from a directory containing a supported Cargo smart-contract project;
+- `wasm-artifact`: run `stellar contract build` to refresh the generated Wasm artifact, or `stellar contract optimize` if the artifact exceeds the 128 KiB Soroban limit.
+
+If any required preflight check fails, the command exits with code `2` before any deployment subprocess is started.

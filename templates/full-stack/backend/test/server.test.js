@@ -1,14 +1,19 @@
 import assert from 'node:assert/strict';
 import { Buffer } from 'node:buffer';
-import { once } from 'node:events';
+import { EventEmitter, once } from 'node:events';
 import http from 'node:http';
 import test from 'node:test';
+import { startBackend } from '../src/start.js';
 import {
   BASELINE_SECURITY_HEADERS,
+  BackendConfigurationError,
   createBackendServer,
   createHealthPayload,
+  createHealthUnavailablePayload,
+  HEALTH_CONTRACT_VERSION,
   getBackendConfig,
   MAX_REQUEST_BODY_BYTES,
+  validateBackendConfig,
 } from '../src/server.js';
 
 test('uses safe Testnet defaults without secrets', () => {
@@ -20,11 +25,15 @@ test('uses safe Testnet defaults without secrets', () => {
   assert.equal(config.port, 3000);
 });
 
-test('returns a generated application health payload', () => {
-  assert.deepEqual(createHealthPayload({}), {
+test('returns the documented minimal versioned health payload', () => {
+  assert.equal(HEALTH_CONTRACT_VERSION, 1);
+  assert.deepEqual(createHealthPayload(), {
     status: 'ok',
-    app: '{{projectName}}',
-    network: 'TESTNET',
+    version: 1,
+  });
+  assert.deepEqual(createHealthUnavailablePayload(), {
+    status: 'unavailable',
+    version: 1,
   });
 });
 
@@ -43,9 +52,10 @@ test('health route answers GET and HEAD with status 200', async () => {
     assert.equal(getRes.headers.get('content-type'), 'application/json');
     assert.equal(getRes.headers.get('x-content-type-options'), 'nosniff');
     const getPayload = await getRes.json();
-    assert.equal(getPayload.status, 'ok');
-    assert.equal(getPayload.app, '{{projectName}}');
-    assert.equal(getPayload.network, 'TESTNET');
+    assert.deepEqual(getPayload, {
+      status: 'ok',
+      version: HEALTH_CONTRACT_VERSION,
+    });
 
     const headRes = await globalThis.fetch(`${baseUrl}/health`, {
       method: 'HEAD',
@@ -54,6 +64,77 @@ test('health route answers GET and HEAD with status 200', async () => {
     assert.equal(headRes.headers.get('content-type'), 'application/json');
     const headText = await headRes.text();
     assert.equal(headText, '');
+  } finally {
+    server.close();
+  }
+});
+
+test('health handler failures return a minimal unavailable response', async () => {
+  const server = createBackendServer(
+    {},
+    {
+      routes: {
+        '/health': {
+          methods: ['GET', 'HEAD'],
+          handler() {
+            throw new Error(
+              'private connection string and stack details must not escape',
+            );
+          },
+        },
+      },
+    },
+  );
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+
+  try {
+    const address = server.address();
+    assert.ok(address && typeof address === 'object');
+    const response = await globalThis.fetch(
+      `http://127.0.0.1:${address.port}/health`,
+    );
+
+    assert.equal(response.status, 503);
+    const body = await response.text();
+    assert.deepEqual(JSON.parse(body), {
+      status: 'unavailable',
+      version: HEALTH_CONTRACT_VERSION,
+    });
+    assert.doesNotMatch(body, /private connection|string|stack details/i);
+  } finally {
+    server.close();
+  }
+});
+
+test('unexpected route failures return a generic response without internals', async () => {
+  const server = createBackendServer(
+    {},
+    {
+      routes: {
+        '/failure': {
+          methods: ['GET'],
+          handler() {
+            throw new Error('secret-token /srv/private/app.js:123');
+          },
+        },
+      },
+    },
+  );
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+
+  try {
+    const address = server.address();
+    assert.ok(address && typeof address === 'object');
+    const response = await globalThis.fetch(
+      `http://127.0.0.1:${address.port}/failure`,
+    );
+
+    assert.equal(response.status, 500);
+    const body = await response.text();
+    assert.deepEqual(JSON.parse(body), { error: 'internal_error' });
+    assert.doesNotMatch(body, /secret-token|private|app\.js|123/);
   } finally {
     server.close();
   }
@@ -350,8 +431,7 @@ test('HTTP server exposes health and serves static frontend assets with baseline
     const healthPayload = await health.json();
     assert.deepEqual(healthPayload, {
       status: 'ok',
-      app: '{{projectName}}',
-      network: 'TESTNET',
+      version: HEALTH_CONTRACT_VERSION,
     });
 
     // Test static asset route: /app.js
@@ -425,4 +505,86 @@ test('HTTP server applies baseline security headers on error and traversal respo
   } finally {
     server.close();
   }
+});
+
+test('validates the documented Testnet defaults', () => {
+  const config = getBackendConfig({});
+
+  assert.deepEqual(validateBackendConfig(config), config);
+});
+
+test('rejects missing or malformed port values before startup', () => {
+  for (const value of ['', ' ', 'abc', '3000abc', '0', '-1', '65536', '3.5']) {
+    const config = getBackendConfig({ BACKEND_PORT: value });
+    assert.throws(
+      () => validateBackendConfig(config),
+      (error) =>
+        error instanceof BackendConfigurationError &&
+        /BACKEND_PORT/.test(error.message),
+    );
+  }
+
+  assert.equal(getBackendConfig({ BACKEND_PORT: '3100' }).port, 3100);
+});
+
+test('rejects malformed Stellar endpoints without echoing secret-like values', () => {
+  const secretEndpoint = 'https://user:token@example.test/health';
+  const config = getBackendConfig({
+    STELLAR_HORIZON_URL: secretEndpoint,
+    STELLAR_RPC_URL: 'not-a-url',
+  });
+
+  assert.throws(
+    () => validateBackendConfig(config),
+    (error) => {
+      assert.ok(error instanceof BackendConfigurationError);
+      assert.match(error.message, /STELLAR_HORIZON_URL/);
+      assert.match(error.message, /STELLAR_RPC_URL/);
+      assert.doesNotMatch(error.message, /token|user|example\.test|not-a-url/);
+      return true;
+    },
+  );
+});
+
+test('rejects conflicting network mode and endpoint values', () => {
+  assert.throws(
+    () => validateBackendConfig(getBackendConfig({ STELLAR_NETWORK: 'MAINNET' })),
+    (error) =>
+      error instanceof BackendConfigurationError &&
+      /STELLAR_NETWORK must be TESTNET/.test(error.message),
+  );
+
+  assert.throws(
+    () =>
+      validateBackendConfig(
+        getBackendConfig({
+          STELLAR_HORIZON_URL: 'https://horizon-mainnet.stellar.org',
+        }),
+      ),
+    (error) =>
+      error instanceof BackendConfigurationError &&
+      /non-Testnet Stellar endpoint/.test(error.message),
+  );
+});
+
+test('startup validation runs before any listener is opened', () => {
+  const listened = [];
+  const listen = (server, port) => {
+    listened.push({ server, port });
+    return 'listener';
+  };
+
+  assert.throws(
+    () => startBackend({ BACKEND_PORT: 'not-a-port' }, listen),
+    BackendConfigurationError,
+  );
+  assert.deepEqual(listened, []);
+
+  const started = startBackend({ BACKEND_PORT: '3100' }, listen);
+  assert.equal(started.config.port, 3100);
+  assert.equal(started.listener, 'listener');
+  assert.deepEqual(
+    listened.map((entry) => entry.port),
+    [3100],
+  );
 });

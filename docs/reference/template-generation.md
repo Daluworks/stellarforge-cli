@@ -7,10 +7,22 @@ StellarForge generates projects from project-controlled template directories onl
 1. The project name and final destination are validated before generation.
 2. The selected template comes from the controlled template registry.
 3. Template contents are rendered into a temporary staging directory located beside the final destination.
-4. Every template entry is checked before it is copied. Symbolic links and unsupported filesystem entry types are rejected.
-5. Text substitution supports only the allowlisted `projectName` and `templateId` tokens. Unknown tokens fail generation; no expression evaluation is performed.
-6. Files containing NUL bytes are treated as binary and copied byte-for-byte without substitution.
-7. The completed staging directory is promoted to the final destination only after all template files render successfully.
+4. Every template entry is checked before it is copied. The source root is resolved to its real path, each entry must resolve inside that root, and symbolic links and unsupported filesystem entry types are rejected. Dangling, escaping, and internal symlink entries are all refused; no symlink target is copied.
+5. Template paths are validated for cross-platform portability before writing. Paths that differ only by Unicode normalization or case folding are rejected on every host, and the error names both relative paths. Distinct non-colliding paths remain supported.
+6. Generated POSIX file modes are restricted: regular files use `0644`, files with any source execute bit use `0755`, and directories use `0755`. Setuid, setgid, sticky, and group/world write bits are never copied. On Windows, POSIX mode bits are not meaningful, so generation does not apply chmod and the ordinary writable-file behavior applies.
+7. Text substitution supports only the allowlisted `projectName` and `templateId` tokens. Unknown tokens fail generation; no expression evaluation is performed.
+8. Files containing NUL bytes are treated as binary and copied byte-for-byte without substitution.
+9. The completed staging directory is promoted to the final destination only after all template files render successfully.
+
+## Limits
+
+Template generation enforces conservative boundaries so unexpectedly large or malformed template trees cannot exhaust resources or memory; exceeding any of them fails before a single byte is written:
+
+- at most 256 regular files;
+- at most 1 MiB (1024 × 1024 bytes) of aggregate regular-file content;
+- at most 256 KiB (256 × 1024 bytes) for any single file.
+
+Directory payload bytes are never counted (they are platform-dependent); the budget is measured by walking the template tree with the same checks the copier applies, but without reading file contents. Bundled templates use only a fraction of these budgets (tens of small files). Failure messages report safe aggregate counts or byte totals only — never local paths or individual file names.
 
 ## Failure and cleanup behavior
 

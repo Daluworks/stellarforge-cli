@@ -1,10 +1,5 @@
 import { Command } from 'commander';
-import {
-  elapsedMonotonicMs,
-  TerminalOutput,
-  type CommandExecutionCategory,
-} from '../output/terminal.js';
-import { resolveCliVersion } from '../version.js';
+import { resolveCliMetadata, resolveCliVersion } from '../version.js';
 import { createDeployCommand } from './deploy.js';
 import { createDevCommand } from './dev.js';
 import { createDoctorCommand } from './doctor.js';
@@ -54,19 +49,12 @@ function reportUnknownCommand(command: Command): void {
   (command as unknown as UnknownCommandReporter).unknownCommand();
 }
 
-export function createRootCommand(
-  version = resolveCliVersion(),
-  options: RootCommandOptions = {},
-): Command {
-  const output = options.output ?? new TerminalOutput();
-  const clock = options.clock ?? (() => process.hrtime.bigint());
-  let actionStartNs: bigint | undefined;
+export function createRootCommand(version = resolveCliVersion()): Command {
+  const metadata = resolveCliMetadata();
 
   const program = new Command()
-    .name('stellarforge')
-    .description(
-      'Open infrastructure for building production-ready Stellar applications.',
-    )
+    .name(metadata.executable)
+    .description(metadata.description)
     .usage('[options] [command]')
     .version(version)
     .option(
@@ -114,13 +102,13 @@ export function createRootCommand(
 
   applyUsageErrorHandling(
     program,
-    `Available commands: ${commandNames}.\nRun 'stellarforge --help' for usage.`,
+    `Available commands: ${commandNames}.\nRun '${metadata.executable} --help' for usage.`,
   );
 
   for (const command of subcommands) {
     applyUsageErrorHandling(
       command,
-      `Run 'stellarforge ${command.name()} --help' for usage.`,
+      `Run '${metadata.executable} ${command.name()} --help' for usage.`,
     );
   }
 

@@ -4,35 +4,37 @@ This page covers common failures in the implemented StellarForge CLI MVP.
 
 ## Find your problem
 
-| Failure category | Typical symptom | Go to |
-| --- | --- | --- |
-| Install and setup | `stellarforge` is not found, Node.js or npm is unsupported, or `npm ci` or the build fails | [Installation or setup fails](#installation-or-setup-fails) |
-| Usage | Unknown command or option, or a missing argument | [Command or option is not recognized](#command-or-option-is-not-recognized) |
-| Project creation | `stellarforge new` refuses the name, template, or destination | [`stellarforge new` cannot create the project](#stellarforge-new-cannot-create-the-project) and [Project name is rejected](#project-name-is-rejected) |
-| Environment | `stellarforge doctor` reports a failed diagnostic | [`stellarforge doctor` reports failures](#stellarforge-doctor-reports-failures) |
-| Local development | No supported script, or the npm process fails | [`stellarforge dev` says no supported script exists](#stellarforge-dev-says-no-supported-script-exists) |
-| Testing | No supported test workflow, or the project test fails | [`stellarforge test` cannot find a workflow](#stellarforge-test-cannot-find-a-workflow) |
-| Configuration | `stellarforge.config.json` is rejected | [Configuration file is rejected](#configuration-file-is-rejected) |
-| Deployment | Network or identity is missing or rejected, Mainnet or Futurenet is refused, or Stellar CLI fails | [Deployment network is required](#deployment-network-is-required), [Deployment rejects Mainnet or Futurenet](#deployment-rejects-mainnet-or-futurenet), [Deployment identity is rejected](#deployment-identity-is-rejected), and [Stellar CLI deployment fails](#stellar-cli-deployment-fails) |
-| Unexpected failure | A generic error message with exit code `1` or `4` | [Unexpected or internal failure](#unexpected-or-internal-failure) |
-| Sensitive data | A secret appeared in output or in a report | [Sensitive information appeared in a failure](#sensitive-information-appeared-in-a-failure) |
+| Failure category   | Typical symptom                                                                                                                          | Go to                                                                                                                                                                                                                                                                                                                                                                 |
+| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Install and setup  | `stellarforge` is not found, Node.js or npm is unsupported, or `npm ci` or the build fails                                               | [Installation or setup fails](#installation-or-setup-fails)                                                                                                                                                                                                                                                                                                           |
+| Usage              | Unknown command or option, or a missing argument                                                                                         | [Command or option is not recognized](#command-or-option-is-not-recognized)                                                                                                                                                                                                                                                                                           |
+| Project creation   | `stellarforge new` refuses the name, template, or destination                                                                            | [`stellarforge new` cannot create the project](#stellarforge-new-cannot-create-the-project) and [Project name is rejected](#project-name-is-rejected)                                                                                                                                                                                                                 |
+| Environment        | `stellarforge doctor` reports a failed diagnostic                                                                                        | [`stellarforge doctor` reports failures](#stellarforge-doctor-reports-failures)                                                                                                                                                                                                                                                                                       |
+| Local development  | No supported script, or the npm process fails                                                                                            | [`stellarforge dev` says no supported script exists](#stellarforge-dev-says-no-supported-script-exists)                                                                                                                                                                                                                                                               |
+| Testing            | No supported test workflow, or the project test fails                                                                                    | [`stellarforge test` cannot find a workflow](#stellarforge-test-cannot-find-a-workflow)                                                                                                                                                                                                                                                                               |
+| Configuration      | `stellarforge.config.json` is rejected                                                                                                   | [Configuration file is rejected](#configuration-file-is-rejected)                                                                                                                                                                                                                                                                                                     |
+| Deployment         | Network or identity is missing or rejected, Mainnet or Futurenet is refused, Wasm artifact is invalid or oversized, or Stellar CLI fails | [Deployment network is required](#deployment-network-is-required), [Deployment rejects Mainnet or Futurenet](#deployment-rejects-mainnet-or-futurenet), [Deployment identity is rejected](#deployment-identity-is-rejected), [Deployment rejects Wasm artifact](#deployment-rejects-wasm-artifact), and [Stellar CLI deployment fails](#stellar-cli-deployment-fails) |
+| Unexpected failure | A generic error message with exit code `1` or `4`                                                                                        | [Unexpected or internal failure](#unexpected-or-internal-failure)                                                                                                                                                                                                                                                                                                     |
+| Sensitive data     | A secret appeared in output or in a report                                                                                               | [Sensitive information appeared in a failure](#sensitive-information-appeared-in-a-failure)                                                                                                                                                                                                                                                                           |
 
 ### Look up by exit code
 
-| Exit code | Where to look |
-| ---: | --- |
-| `2` | Usage and validation failures: [usage](#command-or-option-is-not-recognized), [`new`](#stellarforge-new-cannot-create-the-project), [project name](#project-name-is-rejected), [`dev`](#stellarforge-dev-says-no-supported-script-exists), [`test`](#stellarforge-test-cannot-find-a-workflow), [configuration](#configuration-file-is-rejected), [deployment network](#deployment-network-is-required), and [deployment identity](#deployment-identity-is-rejected) |
-| `3` | A subprocess failed: [`dev`](#stellarforge-dev-says-no-supported-script-exists), [`test`](#stellarforge-test-cannot-find-a-workflow), or [Stellar CLI deployment](#stellar-cli-deployment-fails) |
-| `5` | [`stellarforge doctor` reports failures](#stellarforge-doctor-reports-failures) |
-| `1` or `4` | [Unexpected or internal failure](#unexpected-or-internal-failure) |
+|  Exit code | Where to look                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| ---------: | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+|        `2` | Usage and validation failures: [usage](#command-or-option-is-not-recognized), [`new`](#stellarforge-new-cannot-create-the-project), [project name](#project-name-is-rejected), [`dev`](#stellarforge-dev-says-no-supported-script-exists), [`test`](#stellarforge-test-cannot-find-a-workflow), [configuration](#configuration-file-is-rejected), [deployment network](#deployment-network-is-required), and [deployment identity](#deployment-identity-is-rejected) |
+|        `3` | A subprocess failed: [`dev`](#stellarforge-dev-says-no-supported-script-exists), [`test`](#stellarforge-test-cannot-find-a-workflow), or [Stellar CLI deployment](#stellar-cli-deployment-fails)                                                                                                                                                                                                                                                                     |
+|        `5` | [`stellarforge doctor` reports failures](#stellarforge-doctor-reports-failures)                                                                                                                                                                                                                                                                                                                                                                                      |
+| `1` or `4` | [Unexpected or internal failure](#unexpected-or-internal-failure)                                                                                                                                                                                                                                                                                                                                                                                                    |
 
 Exit code meanings are defined in [Exit Codes](exit-codes.md). Related references: [Installation](../guides/installation.md), [Quick Start](../guides/quick-start.md), [Command Reference](commands.md), [Configuration](configuration.md), and [Platform Support](platform-support.md).
 
 ## Installation or setup fails
 
-A supported public npm release does not exist yet, so `stellarforge: command not found` is expected until you have linked a source checkout. See [Installation](../guides/installation.md) for the current release state, and do not install the `0.0.0` bootstrap placeholder as an end-user release.
+If `stellarforge: command not found` (macOS/Linux) or `'stellarforge' is not recognized as an internal or external command` (Windows) occurs:
 
-From a source checkout, build and run the CLI directly:
+- **When installed globally via npm:** If you ran `npm install -g @diginodes/stellarforge-cli`, your global npm bin directory is likely missing from your shell's `PATH`. Follow [PATH troubleshooting](../guides/installation.md#path-troubleshooting) to diagnose your global prefix and safely configure your path without leaking environment secrets.
+- **On demand with npx:** You can bypass global PATH requirements entirely by executing commands on demand with `npx @diginodes/stellarforge-cli <command>`.
+- **From a source checkout:** Build and run the compiled CLI entry point directly:
 
 ```bash
 npm ci
@@ -110,6 +112,8 @@ Selection follows that order, and a candidate only wins when its value is a non-
 
 If the selected npm process starts and then fails, StellarForge returns subprocess exit category `3`.
 
+You may invoke `stellarforge dev` from the project root or a nested directory. Discovery stops at the filesystem root, a `.git` boundary, or the generated `.stellarforge.json` marker, and examines at most eight parent directories. If more than one project root is found, run the command from the single generated project root; nested workspaces are not supported.
+
 See the [`dev` command reference](commands.md#stellarforge-dev).
 
 ## `stellarforge test` cannot find a workflow
@@ -121,7 +125,9 @@ A supported test project must have either:
 
 Node.js projects are run through `npm run test`; Cargo projects are run through `cargo test`.
 
-A failing project test is preserved as a subprocess failure instead of being converted to success.
+A failing project test is preserved as a subprocess failure instead of being converted to success. If npm or its launcher is missing or cannot be executed, the error identifies that prerequisite and references the supported `Node.js >=22.13.0 <25` and `npm >=10.9.0` ranges; it does not include environment values. Install a supported runtime and rerun `stellarforge doctor` before retrying.
+
+You may invoke `stellarforge test` from the project root or a nested directory. Discovery is bounded by the filesystem root, a `.git` boundary, or the generated `.stellarforge.json` marker, and examines at most eight parent directories. If more than one project root is found, run the command from the single generated project root.
 
 See the [`test` command reference](commands.md#stellarforge-test).
 
@@ -135,7 +141,7 @@ stellarforge.config.json
 
 and live at the project root.
 
-It must be a regular non-symlink file, no larger than 64 KiB, and contain valid JSON with schema version `1`, and it must not contain duplicate object keys at any nesting level (escaped-equivalent spellings are treated as the same key).
+It must be a regular non-symlink file, no larger than 64 KiB, encoded as UTF-8 (a single leading UTF-8 byte-order mark is tolerated), and contain valid JSON with schema version `1`, and it must not contain duplicate object keys at any nesting level (escaped-equivalent spellings are treated as the same key).
 
 Supported fields are only:
 
@@ -157,7 +163,7 @@ See [Configuration](configuration.md).
 - `project.cargo-toml.parseable` — an existing `Cargo.toml` must be valid UTF-8 declaring `[package]` or `[workspace]`;
 - `project.configuration.well-formed` — an existing `stellarforge.config.json` must pass [configuration](configuration.md) validation.
 
-Only *required*-check failures make the command exit with code `5`; a `0` exit means the documented required requirements are met. The command never prints secret values or absolute paths, and remediation text tells you exactly how to fix each finding.
+Only _required_-check failures make the command exit with code `5`; a `0` exit means the documented required requirements are met. The command never prints secret values or absolute paths, and remediation text tells you exactly how to fix each finding.
 
 See [Commands](commands.md#stellarforge-validate).
 
@@ -204,6 +210,17 @@ Do not pass:
 - an option-like value beginning with `-`.
 
 StellarForge delegates signing to Stellar CLI identity management.
+
+## Deployment rejects Wasm artifact
+
+The deployment preflight and resolver reject invalid build artifacts locally before any external subprocess is started:
+
+- **Missing artifact:** run `stellar contract build` to compile the contract.
+- **Empty file or directory:** the artifact at `target/wasm32v1-none/release/stellarforge-starter-contract.wasm` must be a non-empty regular file, not a directory or empty file.
+- **Unexpected file format:** the artifact must start with the canonical WebAssembly v1 header (`\0asm` magic number and version `1`). Plain text, JSON, shell scripts, or other binary formats are rejected.
+- **Oversized artifact:** the artifact exceeds the documented Soroban contract size limit of 128 KiB (131,072 bytes). Run `stellar contract optimize` to strip symbols and optimize the Wasm binary.
+- **Symlink or workspace escape:** symbolic links and paths escaping the project root are rejected for security.
+- **Stale artifact:** the artifact is older than the contract sources; recompile with `stellar contract build`.
 
 ## Stellar CLI deployment fails
 

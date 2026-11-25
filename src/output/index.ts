@@ -4,6 +4,7 @@ export {
   formatDebugSummary,
   getStringDisplayWidth,
   sanitizeTerminalText,
+  shouldUseColor,
   TerminalOutput,
   wrapTerminalText,
   type CommandExecutionCategory,
